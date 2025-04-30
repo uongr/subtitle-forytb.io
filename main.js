@@ -51,7 +51,11 @@ window.onload = async () => {
   await loadComponent("video", "Video.html");
   await loadComponent("controls", "Controls.html");
   await loadComponent("editor", "SubtitleEditor.html");
-  initApp();
+
+  // 少し遅らせて DOM が反映されるのを待つ
+  setTimeout(() => {
+    initApp();
+  }, 0);
 };
 
 // === メインの初期化処理 ===
