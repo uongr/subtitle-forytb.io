@@ -5,196 +5,261 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>字幕編集ツール</title>
   <style>
-    body { font-family: sans-serif; padding: 1rem; }
-    #video-container { position: relative; width: 100%; max-width: 640px; margin-bottom: 1rem; }
-    #subtitle-overlay {
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 1em;
+    }
+    #subtitle-list-toggle {
+      cursor: pointer;
+      font-weight: bold;
+      margin-bottom: 0.5em;
+    }
+    #sheetList {
+      display: none;
+      border: 1px solid #ccc;
+      padding: 0.5em;
+      max-height: 200px;
+      overflow-y: auto;
+      margin-bottom: 1em;
+    }
+    #sheetList div {
+      cursor: pointer;
+      padding: 0.25em 0;
+    }
+    #videoContainer {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 1em;
+      position: relative;
+    }
+    #overlaySubtitle {
       position: absolute;
       bottom: 10%;
-      width: 100%;
-      text-align: center;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(0, 0, 0, 0.7);
       color: white;
-      text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
-      pointer-events: none;
+      padding: 0.2em 0.5em;
+      font-size: 1.2em;
+      border-radius: 4px;
     }
-    .hidden { display: none; }
-    .sheet-list { margin-bottom: 1rem; }
-    .subtitle-row { display: flex; margin-bottom: 0.5rem; gap: 0.5rem; }
-    .subtitle-row input[type="text"]:first-child {
-      width: 5rem;
+    #controls {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 1em;
+      margin-bottom: 1em;
     }
-    .subtitle-row input[type="text"]:last-child {
-      flex: 1;
+    #fontSizeSelector {
+      display: flex;
+      gap: 0.5em;
     }
-    .controls { margin-bottom: 1rem; }
-    .font-size-controls { margin: 1rem 0; }
-    #subtitles-container { max-width: 100%; }
+    #currentSheetName {
+      text-align: center;
+      margin-bottom: 1em;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1em;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 0.5em;
+    }
+    .time-input {
+      width: 6em;
+    }
+    .add-row {
+      margin-top: 1em;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
   <h2>字幕編集ツール</h2>
 
-  <button onclick="toggleSheetList()">字幕データ一覧を表示/非表示</button>
-  <div id="sheet-list" class="sheet-list hidden"></div>
+  <div id="subtitle-list-toggle" onclick="toggleSheetList()">▼保存済み字幕データ一覧</div>
+  <div id="sheetList"></div>
 
   <div>
-    <label for="url-input">動画URL：</label>
-    <input id="url-input" type="text" style="width: 60%;">
-    <button onclick="loadVideoFromURL()">読み込み</button>
+    <input type="text" id="videoUrlInput" placeholder="YouTube動画のURLまたはIDを入力" style="width: 100%;">
+    <button onclick="loadSubtitles()">字幕を取得</button>
   </div>
 
-  <div id="current-sheet" style="margin: 1rem 0; font-weight: bold;"></div>
-
-  <div id="video-container">
-    <iframe id="yt-player" width="640" height="360" frameborder="0" allowfullscreen></iframe>
-    <div id="subtitle-overlay" class="subtitle-medium"></div>
+  <div id="videoContainer">
+    <iframe id="youtubePlayer" width="560" height="315" frameborder="0" allowfullscreen></iframe>
+    <div id="overlaySubtitle"></div>
   </div>
 
-  <div class="controls">
-    <button onclick="syncPlay()">字幕と動画を同期再生</button>
+  <div id="controls">
+    <button onclick="playWithSubtitle()">字幕と動画を同期再生</button>
     <button onclick="pauseVideo()">一時停止</button>
-    <button onclick="seekVideo(-10)">10秒戻す</button>
-    <button onclick="seekVideo(10)">10秒進める</button>
+    <button onclick="skipTime(-10)">10秒戻し</button>
+    <button onclick="skipTime(10)">10秒送り</button>
+    <div id="fontSizeSelector">
+      <label>字幕サイズ:</label>
+      <button onclick="setFontSize('small')">小</button>
+      <button onclick="setFontSize('medium')">中</button>
+      <button onclick="setFontSize('large')">大</button>
+    </div>
   </div>
 
-  <div class="font-size-controls">
-    <label>字幕サイズ：
-      <select id="font-size-selector" onchange="changeFontSize(this.value)">
-        <option value="small">小</option>
-        <option value="medium" selected>中</option>
-        <option value="large">大</option>
-      </select>
-    </label>
-  </div>
+  <div id="currentSheetName">現在のシート: <span id="sheetName">-</span></div>
 
-  <div id="subtitles-container"></div>
-  <button onclick="addSubtitleRow()">＋ 行を追加</button>
+  <table id="subtitleTable">
+    <thead>
+      <tr><th>時間 (mm:ss.s)</th><th>字幕テキスト</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div class="add-row">
+    <button onclick="addEmptyRow()">＋ 行を追加</button>
+  </div>
 
   <script>
-    let player;
     let subtitles = [];
-    let currentSheetName = "";
+    let currentSheet = '';
+    let videoId = 'EJlmCPF55ZQ';
+    let player;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadSubtitles(videoId);
+      fetchSheets();
+    });
+
+    function extractVideoId(urlOrId) {
+      try {
+        const url = new URL(urlOrId);
+        if (url.hostname.includes('youtu')) {
+          return url.searchParams.get('v') || url.pathname.split('/').pop();
+        }
+      } catch {
+        return urlOrId;
+      }
+      return urlOrId;
+    }
 
     function toggleSheetList() {
-      const list = document.getElementById('sheet-list');
-      list.classList.toggle('hidden');
-    }
-
-    function changeFontSize(size) {
-      const overlay = document.getElementById('subtitle-overlay');
-      overlay.className = '';
-      overlay.classList.add('subtitle-' + size);
-    }
-
-    function formatTimeExcel(value) {
-      const date = new Date(value);
-      const minutes = date.getUTCMinutes();
-      const seconds = date.getUTCSeconds();
-      const millis = Math.floor(date.getUTCMilliseconds() / 100);
-      return `${minutes}:${seconds.toString().padStart(2, '0')}.${millis}`;
-    }
-
-    function parseVideoId(url) {
-      const match = url.match(/(?:youtube\.com.*[?&]v=|youtu\.be\/)([\w-]+)/);
-      return match ? match[1] : url;
-    }
-
-    function loadVideoFromURL() {
-      const url = document.getElementById('url-input').value;
-      const videoId = parseVideoId(url);
-      loadVideo(videoId);
-    }
-
-    function loadVideo(videoId) {
-      document.getElementById('yt-player').src = `https://www.youtube.com/embed/${videoId}?enablejsapi=1`;
-      fetch(`https://script.google.com/macros/s/AKfycbzqGLb-WTleiLCt1ee3tDux4Lr4AczdrILq-w1AIAyXgRriASpQylx7cN-_L6Dke2Z72Q/exec?videoId=${videoId}`)
-        .then(res => res.json())
-        .then(data => {
-          currentSheetName = data.sheetName;
-          subtitles = data.subtitles;
-          document.getElementById('current-sheet').innerText = `現在のシート: ${currentSheetName}`;
-          renderSubtitles();
-        })
-        .catch(() => {
-          subtitles = [];
-          currentSheetName = "";
-          document.getElementById('current-sheet').innerText = "字幕データが取得できませんでした。";
-          renderSubtitles();
-        });
-    }
-
-    function renderSubtitles() {
-      const container = document.getElementById('subtitles-container');
-      container.innerHTML = '';
-      for (let i = 0; i < Math.max(subtitles.length, 30); i++) {
-        const row = document.createElement('div');
-        row.className = 'subtitle-row';
-        const timeInput = document.createElement('input');
-        timeInput.type = 'text';
-        timeInput.value = subtitles[i] ? formatTimeExcel(subtitles[i].time) : '';
-        const textInput = document.createElement('input');
-        textInput.type = 'text';
-        textInput.value = subtitles[i] ? subtitles[i].text : '';
-        row.appendChild(timeInput);
-        row.appendChild(textInput);
-        container.appendChild(row);
+      const list = document.getElementById('sheetList');
+      const toggle = document.getElementById('subtitle-list-toggle');
+      if (list.style.display === 'none') {
+        list.style.display = 'block';
+        toggle.innerText = '▲保存済み字幕データ一覧';
+      } else {
+        list.style.display = 'none';
+        toggle.innerText = '▼保存済み字幕データ一覧';
       }
     }
 
-    function addSubtitleRow() {
+    function fetchSheets() {
+      fetch(`https://script.google.com/macros/s/AKfycbzqGLb-WTleiLCt1ee3tDux4Lr4AczdrILq-w1AIAyXgRriASpQylx7cN-_L6Dke2Z72Q/exec`)
+        .then(res => res.json())
+        .then(data => {
+          const list = document.getElementById('sheetList');
+          list.innerHTML = '';
+          data.sheets.forEach(name => {
+            const div = document.createElement('div');
+            div.textContent = name;
+            div.onclick = () => loadSubtitles(null, name);
+            list.appendChild(div);
+          });
+        });
+    }
+
+    function loadSubtitles(inputId, sheetName) {
+      const url = document.getElementById('videoUrlInput').value || inputId;
+      videoId = extractVideoId(url);
+      let apiUrl = `https://script.google.com/macros/s/AKfycbzqGLb-WTleiLCt1ee3tDux4Lr4AczdrILq-w1AIAyXgRriASpQylx7cN-_L6Dke2Z72Q/exec?videoId=${videoId}`;
+      if (sheetName) apiUrl += `&sheetName=${sheetName}`;
+      fetch(apiUrl)
+        .then(res => res.json())
+        .then(data => {
+          subtitles = data.subtitles || [];
+          currentSheet = data.sheetName;
+          document.getElementById('sheetName').innerText = currentSheet || '-';
+          loadVideo(videoId);
+          displaySubtitles();
+        });
+    }
+
+    function loadVideo(id) {
+      const iframe = document.getElementById('youtubePlayer');
+      iframe.src = `https://www.youtube.com/embed/${id}?enablejsapi=1`;
+    }
+
+    function displaySubtitles() {
+      const tbody = document.getElementById('subtitleTable').querySelector('tbody');
+      tbody.innerHTML = '';
+      const allSubs = [...subtitles];
+      while (allSubs.length < 30) allSubs.push({ time: '', text: '' });
+      allSubs.forEach(sub => {
+        const tr = document.createElement('tr');
+
+        const timeTd = document.createElement('td');
+        const timeInput = document.createElement('input');
+        timeInput.className = 'time-input';
+        timeInput.value = formatTime(sub.time);
+        timeTd.appendChild(timeInput);
+
+        const textTd = document.createElement('td');
+        const textInput = document.createElement('input');
+        textInput.style.width = '100%';
+        textInput.value = sub.text || '';
+        textTd.appendChild(textInput);
+
+        tr.appendChild(timeTd);
+        tr.appendChild(textTd);
+        tbody.appendChild(tr);
+      });
+    }
+
+    function addEmptyRow() {
       subtitles.push({ time: '', text: '' });
-      renderSubtitles();
+      displaySubtitles();
     }
 
-    function seekVideo(seconds) {
-      const iframe = document.getElementById('yt-player');
-      iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'seekTo', args: [seconds, true] }), '*');
+    function formatTime(t) {
+      if (typeof t === 'string' && t.includes(':')) return t;
+      try {
+        const date = new Date(t);
+        const mm = String(date.getMinutes()).padStart(2, '0');
+        const ss = String(date.getSeconds()).padStart(2, '0');
+        const ms = Math.floor(date.getMilliseconds() / 100);
+        return `${mm}:${ss}.${ms}`;
+      } catch {
+        return '00:00.0';
+      }
     }
 
-    function pauseVideo() {
-      const iframe = document.getElementById('yt-player');
-      iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'pauseVideo' }), '*');
-    }
-
-    function syncPlay() {
-      const iframe = document.getElementById('yt-player');
-      iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'playVideo' }), '*');
-      let idx = 0;
-      const overlay = document.getElementById('subtitle-overlay');
-      const interval = setInterval(() => {
-        const time = subtitles[idx]?.time;
-        if (!time) return;
-        const date = new Date(time);
-        const now = new Date();
-        overlay.innerText = subtitles[idx].text;
-        idx++;
-        if (idx >= subtitles.length) clearInterval(interval);
+    function playWithSubtitle() {
+      const overlay = document.getElementById('overlaySubtitle');
+      const rows = document.querySelectorAll('#subtitleTable tbody tr');
+      let index = 0;
+      const playInterval = setInterval(() => {
+        const videoTime = 0; // ←埋め込みAPIから取得するなら要対応
+        const row = rows[index];
+        if (!row) return clearInterval(playInterval);
+        const text = row.children[1].querySelector('input').value;
+        overlay.innerText = text;
+        index++;
       }, 2000);
     }
 
-    // 初期表示処理
-    fetch("https://script.google.com/macros/s/AKfycbzqGLb-WTleiLCt1ee3tDux4Lr4AczdrILq-w1AIAyXgRriASpQylx7cN-_L6Dke2Z72Q/exec?listSheets=true")
-      .then(res => res.json())
-      .then(data => {
-        const container = document.getElementById("sheet-list");
-        data.sheetNames.forEach(name => {
-          const btn = document.createElement("button");
-          btn.textContent = name;
-          btn.onclick = () => {
-            fetch(`https://script.google.com/macros/s/AKfycbzqGLb-WTleiLCt1ee3tDux4Lr4AczdrILq-w1AIAyXgRriASpQylx7cN-_L6Dke2Z72Q/exec?sheetName=${name}`)
-              .then(res => res.json())
-              .then(data => {
-                document.getElementById("url-input").value = `https://youtu.be/${data.videoId}`;
-                loadVideo(data.videoId);
-              });
-          };
-          container.appendChild(btn);
-        });
-      });
+    function pauseVideo() {
+      document.getElementById('youtubePlayer').contentWindow.postMessage('"pauseVideo"', '*');
+    }
 
-    // 初期動画読み込み
-    window.onload = () => {
-      loadVideo("EJlmCPF55ZQ");
-    };
+    function skipTime(sec) {
+      // YouTube iframe APIが必要
+    }
+
+    function setFontSize(size) {
+      const overlay = document.getElementById('overlaySubtitle');
+      overlay.style.fontSize = size === 'small' ? '0.8em' : size === 'large' ? '1.6em' : '1.2em';
+    }
   </script>
 </body>
 </html>
