@@ -1,67 +1,99 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
   <meta charset="UTF-8">
-  <title>字幕編集ページ</title>
+  <title>字幕エディター</title>
   <style>
-    body { font-family: sans-serif; margin: 20px; }
-    textarea { width: 100%; height: 150px; margin-top: 10px; }
-    iframe { width: 100%; height: 315px; margin-top: 10px; }
-    .subtitle-item { margin-bottom: 10px; }
+    body { font-family: sans-serif; padding: 1em; }
+    iframe { width: 100%; height: 360px; margin-bottom: 1em; }
+    .controls, .subtitle-row { display: flex; gap: 0.5em; margin: 0.5em 0; }
+    .subtitle-row input { width: 6em; }
+    .subtitle-text { flex-grow: 1; }
+    details summary { cursor: pointer; font-weight: bold; margin-bottom: 0.5em; }
+    select { margin-top: 0.5em; }
   </style>
 </head>
 <body>
-  <h1>字幕編集ページ</h1>
+  <h1>字幕編集</h1>
 
-  <label for="videoUrl">YouTube動画URL:</label><br>
-  <input type="text" id="videoUrl" placeholder="https://www.youtube.com/watch?v=xxxxx" style="width: 80%;">
-  <button onclick="loadVideo()">読み込み</button>
+  <div>
+    <label for="videoUrl">YouTube動画URL:</label>
+    <input type="text" id="videoUrl" value="https://www.youtube.com/watch?v=EJlmCPF55ZQ" style="width: 60%;">
+    <button onclick="loadVideoAndSubtitles()">読み込み</button>
+  </div>
 
-  <div id="playerContainer"></div>
+  <iframe id="videoFrame" src="https://www.youtube.com/embed/EJlmCPF55ZQ" allowfullscreen></iframe>
 
-  <h2>字幕データ</h2>
-  <div id="subtitleContainer"></div>
+  <details>
+    <summary>字幕データを選択</summary>
+    <select id="subtitleSelector"></select>
+  </details>
+
+  <div class="controls">
+    <button onclick="seek(-10)">⏪ 10秒戻す</button>
+    <button onclick="togglePlayPause()">▶️ / ⏸️</button>
+    <button onclick="seek(10)">⏩ 10秒送る</button>
+    <button onclick="saveSubtitles()">💾 保存</button>
+  </div>
+
+  <div id="subtitleEditor"></div>
 
   <script>
+    const apiBase = 'https://script.google.com/macros/s/AKfycbw.../exec'; // あなたのGAS API URL
+    let currentVideoId = 'EJlmCPF55ZQ';
+
     function extractVideoId(url) {
-      const match = url.match(/[?&]v=([^&]+)/);
-      return match ? match[1] : null;
+      const match = url.match(/[?&]v=([\w-]{11})/);
+      return match ? match[1] : '';
     }
 
-    function loadVideo() {
+    function loadVideoAndSubtitles() {
       const url = document.getElementById('videoUrl').value;
-      const videoId = extractVideoId(url);
-      if (!videoId) {
-        alert('有効なYouTube URLを入力してください。');
-        return;
-      }
+      const vid = extractVideoId(url);
+      if (!vid) return alert('無効なURLです');
+      currentVideoId = vid;
+      document.getElementById('videoFrame').src = `https://www.youtube.com/embed/${vid}`;
 
-      // プレイヤーを表示
-      const iframeHtml = `<iframe src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>`;
-      document.getElementById('playerContainer').innerHTML = iframeHtml;
-
-      // GAS字幕APIから字幕取得
-      const apiUrl = `https://script.google.com/macros/s/AKfycbyU3zSESmIw9FZbv09gaVlCBFUHWTMt9gcQavNn0XgPbJgulQN0aYuzOAz-YsELVquWJA/exec?videoId=${videoId}`;
-      fetch(apiUrl)
+      fetch(`${apiBase}?videoId=${vid}`)
         .then(res => res.json())
-        .then(data => {
-          const container = document.getElementById('subtitleContainer');
-          container.innerHTML = '';
-          data.subtitles.forEach((sub, index) => {
-            const el = document.createElement('div');
-            el.className = 'subtitle-item';
-            el.innerHTML = `
-              <strong>${sub.time}</strong><br>
-              <textarea id="subtitle-${index}">${sub.text}</textarea>
-            `;
-            container.appendChild(el);
-          });
-        })
-        .catch(err => {
-          alert('字幕データの取得に失敗しました。');
-          console.error(err);
-        });
+        .then(data => displaySubtitles(data.subtitles));
     }
+
+    function displaySubtitles(subtitles) {
+      const editor = document.getElementById('subtitleEditor');
+      editor.innerHTML = '';
+      subtitles.forEach((line, idx) => {
+        const row = document.createElement('div');
+        row.className = 'subtitle-row';
+        row.innerHTML = `
+          <input type="text" value="${formatTime(line.time)}" data-index="${idx}" class="subtitle-time">
+          <input type="text" value="${line.text}" class="subtitle-text">
+        `;
+        editor.appendChild(row);
+      });
+    }
+
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60);
+      const s = (seconds % 60).toFixed(1).padStart(4, '0');
+      return `${String(m).padStart(2, '0')}:${s}`;
+    }
+
+    function seek(offset) {
+      const iframe = document.getElementById('videoFrame');
+      iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'seekTo', args: [offset, true] }), '*');
+    }
+
+    function togglePlayPause() {
+      const iframe = document.getElementById('videoFrame');
+      iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*');
+    }
+
+    function saveSubtitles() {
+      alert('字幕の保存はまだ実装されていません');
+    }
+
+    window.onload = () => loadVideoAndSubtitles();
   </script>
 </body>
 </html>
