@@ -2,98 +2,117 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>字幕エディター</title>
+  <title>字幕編集ツール</title>
   <style>
-    body { font-family: sans-serif; padding: 1em; }
-    iframe { width: 100%; height: 360px; margin-bottom: 1em; }
-    .controls, .subtitle-row { display: flex; gap: 0.5em; margin: 0.5em 0; }
-    .subtitle-row input { width: 6em; }
-    .subtitle-text { flex-grow: 1; }
-    details summary { cursor: pointer; font-weight: bold; margin-bottom: 0.5em; }
-    select { margin-top: 0.5em; }
+    body { font-family: sans-serif; padding: 20px; }
+    .subtitle-row { display: flex; gap: 10px; margin-bottom: 5px; }
+    .subtitle-row input[type="text"] { flex: 1; }
+    iframe { margin-top: 20px; }
+    details { margin: 10px 0; }
   </style>
 </head>
 <body>
-  <h1>字幕編集</h1>
+  <h2>字幕編集ツール</h2>
 
-  <div>
-    <label for="videoUrl">YouTube動画URL:</label>
-    <input type="text" id="videoUrl" value="https://www.youtube.com/watch?v=EJlmCPF55ZQ" style="width: 60%;">
-    <button onclick="loadVideoAndSubtitles()">読み込み</button>
-  </div>
-
-  <iframe id="videoFrame" src="https://www.youtube.com/embed/EJlmCPF55ZQ" allowfullscreen></iframe>
+  <label for="videoUrl">YouTube動画URL：</label>
+  <input type="text" id="videoUrl" placeholder="https://www.youtube.com/watch?v=..." size="50">
+  <button onclick="loadVideo()">動画を読み込む</button>
 
   <details>
-    <summary>字幕データを選択</summary>
-    <select id="subtitleSelector"></select>
+    <summary>字幕データの選択（ドロップダウン）</summary>
+    <select id="subtitleList">
+      <option value="">字幕を選択してください</option>
+      <!-- TODO: 動的にGASから取得して埋め込む -->
+    </select>
   </details>
 
-  <div class="controls">
-    <button onclick="seek(-10)">⏪ 10秒戻す</button>
-    <button onclick="togglePlayPause()">▶️ / ⏸️</button>
-    <button onclick="seek(10)">⏩ 10秒送る</button>
-    <button onclick="saveSubtitles()">💾 保存</button>
+  <div id="player">
+    <iframe id="ytPlayer" width="560" height="315" src="" frameborder="0" allowfullscreen></iframe>
   </div>
 
-  <div id="subtitleEditor"></div>
+  <h3>字幕データ</h3>
+  <div id="subtitleArea"></div>
 
   <script>
-    const apiBase = 'https://script.google.com/macros/s/AKfycbyU3zSESmIw9FZbv09gaVlCBFUHWTMt9gcQavNn0XgPbJgulQN0aYuzOAz-YsELVquWJA/exec'; // 自分のGAS API URL
-    let currentVideoId = 'EJlmCPF55ZQ';
+    const defaultVideoId = "EJlmCPF55ZQ";
 
+    // 共通：YouTube URL から動画IDを抽出
     function extractVideoId(url) {
-      const match = url.match(/[?&]v=([\w-]{11})/);
-      return match ? match[1] : '';
+      const patterns = [
+        /youtu\.be\/([a-zA-Z0-9_-]{11})/,
+        /v=([a-zA-Z0-9_-]{11})/,
+        /embed\/([a-zA-Z0-9_-]{11})/,
+        /shorts\/([a-zA-Z0-9_-]{11})/
+      ];
+      for (const pattern of patterns) {
+        const match = url.match(pattern);
+        if (match) return match[1];
+      }
+      return null;
     }
 
-    function loadVideoAndSubtitles() {
-      const url = document.getElementById('videoUrl').value;
-      const vid = extractVideoId(url);
-      if (!vid) return alert('無効なURLです');
-      currentVideoId = vid;
-      document.getElementById('videoFrame').src = `https://www.youtube.com/embed/${vid}`;
+    // 動画を埋め込み & 字幕取得
+    function loadVideo() {
+      const url = document.getElementById("videoUrl").value;
+      const videoId = extractVideoId(url);
+      if (!videoId) {
+        alert("動画IDを取得できません。URLを確認してください。");
+        return;
+      }
+      updateVideo(videoId);
+      fetchSubtitles(videoId);
+    }
 
-      fetch(`${apiBase}?videoId=${vid}`)
+    function updateVideo(videoId) {
+      const embedUrl = `https://www.youtube.com/embed/${videoId}`;
+      document.getElementById("ytPlayer").src = embedUrl;
+    }
+
+    function fetchSubtitles(videoId) {
+      fetch(`https://script.google.com/macros/s/AKfycbyU3zSESmIw9FZbv09gaVlCBFUHWTMt9gcQavNn0XgPbJgulQN0aYuzOAz-YsELVquWJA/exec?videoId=${videoId}`)
         .then(res => res.json())
-        .then(data => displaySubtitles(data.subtitles));
+        .then(data => displaySubtitles(data.subtitles))
+        .catch(err => {
+          console.error("字幕取得エラー:", err);
+          document.getElementById("subtitleArea").innerText = "字幕を取得できませんでした。";
+        });
     }
 
     function displaySubtitles(subtitles) {
-      const editor = document.getElementById('subtitleEditor');
-      editor.innerHTML = '';
-      subtitles.forEach((line, idx) => {
-        const row = document.createElement('div');
-        row.className = 'subtitle-row';
-        row.innerHTML = `
-          <input type="text" value="${formatTime(line.time)}" data-index="${idx}" class="subtitle-time">
-          <input type="text" value="${line.text}" class="subtitle-text">
-        `;
-        editor.appendChild(row);
+      const area = document.getElementById("subtitleArea");
+      area.innerHTML = "";
+      subtitles.forEach(sub => {
+        const row = document.createElement("div");
+        row.className = "subtitle-row";
+
+        const timeInput = document.createElement("input");
+        timeInput.type = "text";
+        timeInput.value = toTimeFormat(sub.time);
+        timeInput.size = 7;
+
+        const textInput = document.createElement("input");
+        textInput.type = "text";
+        textInput.value = sub.text;
+        textInput.size = 50;
+
+        row.appendChild(timeInput);
+        row.appendChild(textInput);
+        area.appendChild(row);
       });
     }
 
-    function formatTime(seconds) {
-      const m = Math.floor(seconds / 60);
-      const s = (seconds % 60).toFixed(1).padStart(4, '0');
-      return `${String(m).padStart(2, '0')}:${s}`;
+    function toTimeFormat(timeStr) {
+      const sec = parseFloat(timeStr);
+      const min = Math.floor(sec / 60);
+      const secRemainder = (sec % 60).toFixed(1).padStart(4, "0");
+      return `${min}:${secRemainder}`;
     }
 
-    function seek(offset) {
-      const iframe = document.getElementById('videoFrame');
-      iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'seekTo', args: [offset, true] }), '*');
-    }
-
-    function togglePlayPause() {
-      const iframe = document.getElementById('videoFrame');
-      iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*');
-    }
-
-    function saveSubtitles() {
-      alert('字幕の保存はまだ実装されていません');
-    }
-
-    window.onload = () => loadVideoAndSubtitles();
+    // 初期表示処理
+    window.onload = () => {
+      updateVideo(defaultVideoId);
+      fetchSubtitles(defaultVideoId);
+    };
   </script>
 </body>
 </html>
