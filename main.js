@@ -2,7 +2,7 @@
 
 // === 初期設定 ===
 const DEFAULT_VIDEO_ID = "EJlmCPF55ZQ";
-const GAS_API_URL = "https://script.google.com/macros/s/xxxxxxxxxxxxxxxxxxxx/exec"; // ★あなたのGAS URLに置き換えてください
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzqGLb-WTleiLCt1ee3tDux4Lr4AczdrILq-w1AIAyXgRriASpQylx7cN-_L6Dke2Z72Q/exec"; // 最新デプロイGAS URL
 
 // === ユーティリティ関数 ===
 function extractVideoId(url) {
