@@ -6,13 +6,19 @@
   <style>
     body { font-family: Arial, sans-serif; padding: 10px; }
     #video-container, #controls { text-align: center; margin: 20px 0; }
-    #subtitles-table input { width: 100%; box-sizing: border-box; }
     .subtitle-row { display: flex; margin-bottom: 5px; gap: 10px; }
-    .time-input { width: 80px; }
-    .text-input { flex: 1; }
+    .time-input {
+      width: 80px;
+      min-width: 80px;
+      max-width: 80px;
+    }
+    .text-input {
+      flex: 1;
+    }
+    #subtitles-table input { box-sizing: border-box; }
     #sheet-list { margin-bottom: 10px; display: none; }
     #sheet-names { display: flex; flex-direction: column; gap: 4px; }
-    #sheet-toggle { cursor: pointer; color: blue; margin-bottom: 10px; }
+    #sheet-toggle { cursor: pointer; color: blue; margin-bottom: 10px; display: inline-block; }
     #subtitle-overlay {
       position: absolute;
       bottom: 60px;
@@ -69,12 +75,13 @@
 
   <div id="subtitles-table"></div>
 
-  <script>
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzqGLb-WTleiLCt1ee3tDux4Lr4AczdrILq-w1AIAyXgRriASpQylx7cN-_L6Dke2Z72Q/exec"; // ← 最新デプロイURL
+  <div style="text-align: center; margin-top: 10px;">
+    <button onclick="addEmptySubtitleRow()">＋ 行を追加</button>
+  </div>
 
-    let player;
+  <script>
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzqGLb-WTleiLCt1ee3tDux4Lr4AczdrILq-w1AIAyXgRriASpQylx7cN-_L6Dke2Z72Q/exec"; // 実際のURLに置換
     let subtitles = [];
-    let currentSubtitleIndex = 0;
 
     document.getElementById('sheet-toggle').addEventListener('click', () => {
       const list = document.getElementById('sheet-list');
@@ -104,39 +111,6 @@
     function extractVideoId(url) {
       const match = url.match(/(?:v=|\/)([0-9A-Za-z_-]{11})/);
       return match ? match[1] : '';
-    }
-
-    function loadSubtitlesFromURL() {
-      const url = document.getElementById("video-url").value;
-      const videoId = extractVideoId(url);
-      if (videoId) {
-        loadSubtitles(videoId);
-      } else {
-        alert("有効な動画URLを入力してください。");
-      }
-    }
-
-    function loadSubtitlesFromSheet(sheetName) {
-      fetch(`${GAS_API_URL}?mode=data&sheet=${sheetName}`)
-        .then(res => res.json())
-        .then(data => {
-          document.getElementById('video-url').value = `https://youtu.be/${data.videoId}`;
-          document.getElementById("youtube-player").src = `https://www.youtube.com/embed/${data.videoId}?enablejsapi=1`;
-          subtitles = data.subtitles;
-          document.getElementById('current-sheet').innerText = `現在のシート: ${sheetName}`;
-          renderSubtitles(subtitles);
-        });
-    }
-
-    function loadSubtitles(videoId) {
-      fetch(`${GAS_API_URL}?videoId=${videoId}`)
-        .then(res => res.json())
-        .then(data => {
-          document.getElementById("youtube-player").src = `https://www.youtube.com/embed/${data.videoId}?enablejsapi=1`;
-          subtitles = data.subtitles;
-          document.getElementById('current-sheet').innerText = `現在のシート: ${data.sheetName}`;
-          renderSubtitles(subtitles);
-        });
     }
 
     function formatTime(input) {
@@ -177,12 +151,48 @@
       }
     }
 
+    function addEmptySubtitleRow() {
+      subtitles.push({ time: "00:00.0", text: "" });
+      renderSubtitles(subtitles);
+    }
+
+    function loadSubtitlesFromSheet(sheetName) {
+      fetch(`${GAS_API_URL}?mode=data&sheet=${sheetName}`)
+        .then(res => res.json())
+        .then(data => {
+          document.getElementById('video-url').value = `https://youtu.be/${data.videoId}`;
+          document.getElementById("youtube-player").src = `https://www.youtube.com/embed/${data.videoId}?enablejsapi=1`;
+          subtitles = data.subtitles;
+          document.getElementById('current-sheet').innerText = `現在のシート: ${sheetName}`;
+          renderSubtitles(subtitles);
+        });
+    }
+
+    function loadSubtitlesFromURL() {
+      const url = document.getElementById("video-url").value;
+      const videoId = extractVideoId(url);
+      if (videoId) {
+        loadSubtitles(videoId);
+      } else {
+        alert("有効な動画URLを入力してください。");
+      }
+    }
+
+    function loadSubtitles(videoId) {
+      fetch(`${GAS_API_URL}?videoId=${videoId}`)
+        .then(res => res.json())
+        .then(data => {
+          document.getElementById("youtube-player").src = `https://www.youtube.com/embed/${data.videoId}?enablejsapi=1`;
+          subtitles = data.subtitles;
+          document.getElementById('current-sheet').innerText = `現在のシート: ${data.sheetName}`;
+          renderSubtitles(subtitles);
+        });
+    }
+
     function playWithSubtitles() {
       const iframe = document.getElementById("youtube-player");
       const overlay = document.getElementById("subtitle-overlay");
       const playerWindow = iframe.contentWindow;
-
-      let i = 0;
       overlay.style.display = "block";
 
       const interval = setInterval(() => {
@@ -215,7 +225,7 @@
 
     function seekVideo(offset) {
       const iframe = document.getElementById("youtube-player");
-      iframe.contentWindow.postMessage('{"event":"command","func":"seekBy","args":[' + offset + ']}', "*");
+      iframe.contentWindow.postMessage(`{"event":"command","func":"seekBy","args":[${offset}]}`, "*");
     }
 
     function changeSubtitleSize(size) {
@@ -223,7 +233,6 @@
       overlay.className = `size-${size}`;
     }
 
-    // 初期動画ID読み込み
     window.onload = function () {
       loadSubtitles("EJlmCPF55ZQ");
     };
