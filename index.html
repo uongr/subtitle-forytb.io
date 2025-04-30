@@ -1,1 +1,67 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>字幕編集ページ</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; }
+    textarea { width: 100%; height: 150px; margin-top: 10px; }
+    iframe { width: 100%; height: 315px; margin-top: 10px; }
+    .subtitle-item { margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <h1>字幕編集ページ</h1>
 
+  <label for="videoUrl">YouTube動画URL:</label><br>
+  <input type="text" id="videoUrl" placeholder="https://www.youtube.com/watch?v=xxxxx" style="width: 80%;">
+  <button onclick="loadVideo()">読み込み</button>
+
+  <div id="playerContainer"></div>
+
+  <h2>字幕データ</h2>
+  <div id="subtitleContainer"></div>
+
+  <script>
+    function extractVideoId(url) {
+      const match = url.match(/[?&]v=([^&]+)/);
+      return match ? match[1] : null;
+    }
+
+    function loadVideo() {
+      const url = document.getElementById('videoUrl').value;
+      const videoId = extractVideoId(url);
+      if (!videoId) {
+        alert('有効なYouTube URLを入力してください。');
+        return;
+      }
+
+      // プレイヤーを表示
+      const iframeHtml = `<iframe src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>`;
+      document.getElementById('playerContainer').innerHTML = iframeHtml;
+
+      // GAS字幕APIから字幕取得
+      const apiUrl = `https://script.google.com/macros/s/AKfycbyU3zSESmIw9FZbv09gaVlCBFUHWTMt9gcQavNn0XgPbJgulQN0aYuzOAz-YsELVquWJA/exec?videoId=${videoId}`;
+      fetch(apiUrl)
+        .then(res => res.json())
+        .then(data => {
+          const container = document.getElementById('subtitleContainer');
+          container.innerHTML = '';
+          data.subtitles.forEach((sub, index) => {
+            const el = document.createElement('div');
+            el.className = 'subtitle-item';
+            el.innerHTML = `
+              <strong>${sub.time}</strong><br>
+              <textarea id="subtitle-${index}">${sub.text}</textarea>
+            `;
+            container.appendChild(el);
+          });
+        })
+        .catch(err => {
+          alert('字幕データの取得に失敗しました。');
+          console.error(err);
+        });
+    }
+  </script>
+</body>
+</html>
