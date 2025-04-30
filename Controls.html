@@ -1,0 +1,15 @@
+<!-- Controls.html -->
+<div style="text-align: center; margin: 10px 0;">
+  <button onclick="syncPlay()">字幕と動画を同期再生</button>
+  <button onclick="pauseVideo()">一時停止</button>
+  <button onclick="skip(-10)">10秒戻し</button>
+  <button onclick="skip(10)">10秒送り</button>
+  <div style="display: inline-block; margin-left: 20px;">
+    字幕サイズ：
+    <select id="font-size-selector" onchange="changeFontSize()">
+      <option value="small">小</option>
+      <option value="medium" selected>中</option>
+      <option value="large">大</option>
+    </select>
+  </div>
+</div>
